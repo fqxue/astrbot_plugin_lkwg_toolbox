@@ -20,10 +20,10 @@ HELP_TEXT = """用法：
 /lkwg 兑换码
 /lkwg 蛋组查询 <关键字> [只看异色]
 /lkwg 孵蛋查询 <尺寸> <重量>
-/lkwg 生蛋规划 路径 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"""
+/lkwg 生蛋规划 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"""
 
 PLANNER_USAGE = (
-    "用法: /lkwg 生蛋规划 路径 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"
+    "用法: /lkwg 生蛋规划 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"
 )
 
 
@@ -117,28 +117,23 @@ class LkwgToolboxPlugin(Star):
             yield event.plain_result(PLANNER_USAGE)
             return
 
-        mode = args[0]
-        if mode == "路径":
-            parsed = self._parse_planner_route(args[1:])
-            path, label = await self.dzfh.render_planner_route(
-                parsed.target,
-                selections=[(selection.name, selection.sex) for selection in parsed.selections],
-            )
-            parent_text = self._format_planner_selections(parsed)
-            async for item in self._send_image(
-                event,
-                f"生蛋规划路径：目标 {parsed.target}，选择 {parent_text}（{label}）",
-                path,
-            ):
-                yield item
-            return
-
-        yield event.plain_result(PLANNER_USAGE)
+        parsed = self._parse_planner_route(args)
+        path, label = await self.dzfh.render_planner_route(
+            parsed.target,
+            selections=[(selection.name, selection.sex) for selection in parsed.selections],
+        )
+        parent_text = self._format_planner_selections(parsed)
+        async for item in self._send_image(
+            event,
+            f"生蛋规划：目标 {parsed.target}，选择 {parent_text}（{label}）",
+            path,
+        ):
+            yield item
 
     def _parse_planner_route(self, args: list[str]) -> PlannerArgs:
         if not args:
             raise ValueError(
-                "缺少目标精灵。用法: /lkwg 生蛋规划 路径 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"
+                "缺少目标精灵。用法: /lkwg 生蛋规划 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"
             )
         target = args[0]
         selections: list[PlannerSelection] = []
