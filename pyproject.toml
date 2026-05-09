@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "AstrBot plugin for Luoke Wangguo tools"
 requires-python = ">=3.12"
 dependencies = [
+    "astrbot>=4.24.2",
     "playwright>=1.45.0",
 ]
 

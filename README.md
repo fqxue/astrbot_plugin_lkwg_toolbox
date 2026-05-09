@@ -1,6 +1,6 @@
 # 洛克王国工具箱 AstrBot 插件
 
-一个用于 AstrBot 的《洛克王国：世界》工具插件，提供兑换码、远行商人、蛋组查询、孵蛋查询和生蛋规划等功能。
+一个用于 AstrBot 的《洛克王国：世界》工具插件，提供兑换码查询、远行商人截图、蛋组查询、孵蛋查询和生蛋规划预览功能。
 
 仓库地址：[fqxue/astrbot_plugin_lkwg_toolbox](https://github.com/fqxue/astrbot_plugin_lkwg_toolbox)
 
@@ -27,11 +27,11 @@ playwright install chromium
 playwright install-deps chromium
 ```
 
-本插件的截图能力是“每次命令临时启动一次 Chromium，截图完成后立即关闭”，不会常驻后台浏览器。
+插件使用 Playwright 访问网页工具页面并生成截图内容。
 
 ## 命令
 
-所有命令都以 `/lkwg` 开头，仅保留中文命令格式。
+所有命令都以 `/lkwg` 开头。
 
 ```text
 /lkwg 帮助
@@ -63,14 +63,9 @@ playwright install-deps chromium
 ## 说明
 
 - `只看异色` 是中文参数，不需要写英文开关。
-- `生蛋规划` 仅保留 `路径` 命令，支持同时传入 `公 <...>` 和 `母 <...>` 两组精灵。
+- `生蛋规划 路径` 支持同时传入 `公 <...>` 和 `母 <...>` 两组精灵。
 - `预约提醒` 未包含在本插件中。
 - Linux 容器里如果截图失败，优先检查：
   - 是否执行过 `playwright install chromium`
   - 是否安装过系统依赖 `playwright install-deps chromium`
   - 容器是否允许写 `/tmp`
-
-## 开发
-
-入口文件：`main.py`  
-服务模块：`services/`
