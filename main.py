@@ -6,6 +6,7 @@ from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.message_components import Node, Plain
 from astrbot.api.star import Context, Star
 
 from .services.codes import CodeService
@@ -186,28 +187,29 @@ class LkwgToolboxPlugin(Star):
     async def _build_codes_forward(self, event: AstrMessageEvent):
         codes = await self.codes.get_codes()
         stats = await self.codes.get_code_stats()
-        nodes = []
+        nodes: list[Node] = []
         for item in codes:
             code_text = str(item.get("code") or item.get("cdkey") or item.get("key") or "").strip()
             if not code_text:
                 continue
-            nodes.append({
-                "type": "node",
-                "data": {
-                    "name": "洛克王国工具箱",
-                    "uin": "0",
-                    "content": code_text,
-                },
-            })
+            nodes.append(
+                Node(
+                    uin=0,
+                    name="洛克王国工具箱",
+                    content=[Plain(code_text)],
+                )
+            )
 
-        nodes.append({
-            "type": "node",
-            "data": {
-                "name": "洛克王国工具箱",
-                "uin": "0",
-                "content": self._format_code_stats(stats),
-            },
-        })
+        if not nodes:
+            return event.plain_result("未获取到可用兑换码")
+
+        nodes.append(
+            Node(
+                uin=0,
+                name="洛克王国工具箱",
+                content=[Plain(self._format_code_stats(stats))],
+            )
+        )
         return event.chain_result(nodes)
 
     @staticmethod
