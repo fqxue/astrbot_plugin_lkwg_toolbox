@@ -2,6 +2,7 @@ import json
 import re
 import shlex
 from dataclasses import dataclass
+from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
@@ -16,7 +17,6 @@ HELP_TEXT = """用法：
 /lkwg 帮助
 /lkwg 远行商人
 /lkwg 兑换码
-/lkwg 兑换码统计
 /lkwg 蛋组查询 <关键字> [只看异色]
 /lkwg 孵蛋查询 <尺寸> <重量>
 /lkwg 生蛋规划 路径 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"""
@@ -72,11 +72,7 @@ class LkwgToolboxPlugin(Star):
                 async for item in self._send_image(event, "远行商人截图", await self.dzfh.render_merchant()):
                     yield item
             elif action == "兑换码":
-                payload = await self.codes.get_codes()
-                yield event.plain_result(json.dumps(payload, ensure_ascii=False, indent=2))
-            elif action == "兑换码统计":
-                payload = await self.codes.get_code_stats()
-                yield event.plain_result(json.dumps(payload, ensure_ascii=False, indent=2))
+                yield await self._build_codes_forward(event)
             elif action == "蛋组查询":
                 async for item in self._handle_egggroup(event, args):
                     yield item
@@ -186,6 +182,42 @@ class LkwgToolboxPlugin(Star):
     async def _send_image(self, event: AstrMessageEvent, title: str, path: str):
         yield event.plain_result(title)
         yield event.image_result(path)
+
+    async def _build_codes_forward(self, event: AstrMessageEvent):
+        codes = await self.codes.get_codes()
+        stats = await self.codes.get_code_stats()
+        nodes = []
+        for item in codes:
+            code_text = str(item.get("code") or item.get("cdkey") or item.get("key") or "").strip()
+            if not code_text:
+                continue
+            nodes.append({
+                "type": "node",
+                "data": {
+                    "name": "洛克王国工具箱",
+                    "uin": "0",
+                    "content": code_text,
+                },
+            })
+
+        nodes.append({
+            "type": "node",
+            "data": {
+                "name": "洛克王国工具箱",
+                "uin": "0",
+                "content": self._format_code_stats(stats),
+            },
+        })
+        return event.chain_result(nodes)
+
+    @staticmethod
+    def _format_code_stats(stats: Any) -> str:
+        if isinstance(stats, dict):
+            lines = ["兑换码统计"]
+            for key, value in stats.items():
+                lines.append(f"{key}: {value}")
+            return "\n".join(lines)
+        return f"兑换码统计\n{json.dumps(stats, ensure_ascii=False, indent=2)}"
 
     @staticmethod
     def _extract_tail(message: str) -> str:

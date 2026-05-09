@@ -37,7 +37,6 @@ playwright install-deps chromium
 /lkwg 帮助
 /lkwg 远行商人
 /lkwg 兑换码
-/lkwg 兑换码统计
 /lkwg 蛋组查询 <关键字> [只看异色]
 /lkwg 孵蛋查询 <尺寸> <重量>
 /lkwg 生蛋规划 路径 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]
@@ -59,7 +58,7 @@ playwright install-deps chromium
 ## 输出
 
 - `远行商人 / 蛋组查询 / 孵蛋查询 / 生蛋规划` 返回图片
-- `兑换码 / 兑换码统计` 返回 JSON 文本
+- `兑换码` 返回合并转发消息，每条兑换码各占一条，最后一条附带兑换码统计
 
 ## 说明
 
