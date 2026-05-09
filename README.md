@@ -2,14 +2,23 @@
 
 一个用于 AstrBot 的《洛克王国：世界》工具插件，提供兑换码、远行商人、蛋组查询、孵蛋查询和生蛋规划等功能。
 
-## 安装
+仓库地址：[fqxue/astrbot_plugin_lkwg_toolbox](https://github.com/fqxue/astrbot_plugin_lkwg_toolbox)
 
-1. 将 `astrbot_plugin_lkwg_toolbox/` 放到 AstrBot 的插件目录。
-2. 安装依赖：
+## 快速安装
+
+在 AstrBot 插件管理器中搜索 `astrbot_plugin_lkwg_toolbox` 安装，或通过 Git 克隆：
 
 ```powershell
-uv add playwright
-uv run playwright install chromium
+cd AstrBot/data/plugins
+git clone https://github.com/fqxue/astrbot_plugin_lkwg_toolbox.git
+```
+
+## 环境依赖
+
+确保已安装 Playwright 浏览器内核：
+
+```powershell
+playwright install chromium
 ```
 
 如果运行在 Linux 容器里，通常还需要补系统依赖：
@@ -22,7 +31,7 @@ playwright install-deps chromium
 
 ## 命令
 
-所有命令都以 `/lkwg` 开头。
+所有命令都以 `/lkwg` 开头，仅保留中文命令格式。
 
 ```text
 /lkwg 帮助
@@ -32,7 +41,20 @@ playwright install-deps chromium
 /lkwg 蛋组查询 <关键字> [只看异色]
 /lkwg 孵蛋查询 <尺寸> <重量>
 /lkwg 生蛋规划 演示 [目标精灵]
-/lkwg 生蛋规划 路径 <目标精灵> [父本 父1,父2] [性别 公|母]
+/lkwg 生蛋规划 路径 <目标精灵> [父本 <父1,父2>] [性别 <公|母>]
+```
+
+## 示例
+
+```text
+/lkwg 帮助
+/lkwg 远行商人
+/lkwg 蛋组查询 喵喵
+/lkwg 蛋组查询 火花 只看异色
+/lkwg 孵蛋查询 1.20 15.5
+/lkwg 生蛋规划 演示 奇丽草
+/lkwg 生蛋规划 路径 奇丽草
+/lkwg 生蛋规划 路径 奇丽草 父本 喵喵,火花 性别 公
 ```
 
 ## 输出
@@ -43,7 +65,7 @@ playwright install-deps chromium
 ## 说明
 
 - `只看异色` 是中文参数，不需要写英文开关。
-- `生蛋规划` 目前支持演示和参数化预览。
+- `生蛋规划` 目前支持演示和参数化预览，参数写法统一为 `父本 <...>`、`性别 <...>`。
 - `预约提醒` 未包含在本插件中。
 - Linux 容器里如果截图失败，优先检查：
   - 是否执行过 `playwright install chromium`

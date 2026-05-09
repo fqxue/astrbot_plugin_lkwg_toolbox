@@ -1,7 +1,7 @@
 name: astrbot_plugin_lkwg_toolbox
 display_name: 洛克王国工具箱
-desc: 提供兑换码、兑换码统计、远行商人、蛋组查询、孵蛋查询、生蛋规划等命令。
-short_desc: 洛克王国：世界工具集合插件
+desc: 提供 /lkwg 中文命令，支持兑换码、远行商人、蛋组查询、孵蛋查询和生蛋规划。
+short_desc: 洛克王国：世界 /lkwg 中文工具插件
 version: 0.1.0
 author: OpenAI
 astrbot_version: ">=3.4.28"
