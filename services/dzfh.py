@@ -168,22 +168,17 @@ class DzfhService:
             prepare=prepare,
         )
 
-    async def render_planner_demo(self, target: str | None = None) -> tuple[str, str]:
-        return await self.render_planner_route(target or "奇丽草", parents=None, sex="male", demo_mode=True)
-
     async def render_planner_route(
         self,
         target: str,
         *,
-        parents: Sequence[str] | None,
-        sex: str,
-        demo_mode: bool = False,
+        selections: Sequence[tuple[str, str]] | None,
     ) -> tuple[str, str]:
         async def prepare(page: Page) -> None:
             await page.wait_for_function("() => window.$ && window.pageData && window.ToolPage")
             chosen_name = await page.evaluate(
                 """
-                ({ targetKeyword, parentKeywords, sex }) => {
+                ({ targetKeyword, selections }) => {
                     const normalize = (name) => {
                         const result = ToolPage.getPokemonSearchResult(name || '');
                         return result.find(item => item.name === name) || result[0] || null;
@@ -201,17 +196,29 @@ class DzfhService:
                         throw new Error(`未找到目标精灵: ${targetKeyword}`);
                     }
 
-                    const chosenParents = (parentKeywords && parentKeywords.length ? parentKeywords : [targetPokemon.name])
-                        .map(normalize)
+                    const chosenSelections = (selections && selections.length ? selections : [{
+                        name: targetPokemon.name,
+                        sex: 'male',
+                    }])
+                        .map((item) => {
+                            const pokemon = normalize(item.name);
+                            if (!pokemon) {
+                                return null;
+                            }
+                            return {
+                                pokemon,
+                                sex: item.sex === 'female' ? 'female' : 'male',
+                            };
+                        })
                         .filter(Boolean);
-                    if (!chosenParents.length) {
-                        throw new Error('未找到可用父本');
+                    if (!chosenSelections.length) {
+                        throw new Error('未找到可用精灵');
                     }
 
-                    ToolPage.plannerSelectedSex = sex || 'male';
-                    ToolPage.plannerSelectedList = chosenParents.map((pokemon) => ({
+                    ToolPage.plannerSelectedSex = chosenSelections[0].sex;
+                    ToolPage.plannerSelectedList = chosenSelections.map(({ pokemon, sex }) => ({
                         id: pokemon.id,
-                        sex: sex || 'male',
+                        sex,
                     }));
                     ToolPage.renderPlannerSelectedList();
 
@@ -220,20 +227,20 @@ class DzfhService:
                     ToolPage.plannerResultList = {};
 
                     let html = '';
-                    chosenParents.forEach((pokemon) => {
+                    chosenSelections.forEach(({ pokemon, sex }) => {
                         ToolPage.plannerResultList[pokemon.id] = {
                             id: pokemon.id,
-                            sex: sex || 'male',
+                            sex,
                             data: {},
                             path_num: 1,
                             total_step: 1,
                             sort_num: 1,
                             path_length: 1,
-                            msg: '本地演示路径'
+                            msg: '本地参数预览'
                         };
 
                         html += `<div class="pt-box" data-parent-id="${pokemon.id}">`;
-                        html += ToolPage.getPlannerResultHeaderHtml(pokemon.id, sex || 'male', true);
+                        html += ToolPage.getPlannerResultHeaderHtml(pokemon.id, sex, true);
                         html += '<div class="planner-path-box">';
                         html += ToolPage.getPlannerFlowBoxHtml(pokemon.id, targetPokemon.id, pokemon.id, 1);
                         html += '</div>';
@@ -248,8 +255,10 @@ class DzfhService:
                 """,
                 {
                     "targetKeyword": target,
-                    "parentKeywords": list(parents) if parents else [],
-                    "sex": sex,
+                    "selections": [
+                        {"name": name, "sex": sex}
+                        for name, sex in (list(selections) if selections else [])
+                    ],
                 },
             )
             await self.renderer.hydrate_lazy_images(page, "#planner-result-box img.lazyload, #planner-target-result-item img.lazyload, #planner-selected-list img.lazyload")
@@ -263,8 +272,7 @@ class DzfhService:
             viewport={"width": 1280, "height": 2600},
             prepare=prepare,
         )
-        label = "本地演示" if demo_mode else "本地参数预览"
-        return path, label
+        return path, "本地参数预览"
 
     @staticmethod
     def normalize_parent_list(value: str | None) -> list[str]:

@@ -19,20 +19,23 @@ HELP_TEXT = """用法：
 /lkwg 兑换码统计
 /lkwg 蛋组查询 <关键字> [只看异色]
 /lkwg 孵蛋查询 <尺寸> <重量>
-/lkwg 生蛋规划 演示 [目标精灵]
-/lkwg 生蛋规划 路径 <目标精灵> [父本 <父1,父2>] [性别 <公|母>]"""
+/lkwg 生蛋规划 路径 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"""
 
 PLANNER_USAGE = (
-    "用法: /lkwg 生蛋规划 演示 [目标精灵]\n"
-    "或: /lkwg 生蛋规划 路径 <目标精灵> [父本 <父1,父2>] [性别 <公|母>]"
+    "用法: /lkwg 生蛋规划 路径 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"
 )
+
+
+@dataclass(slots=True)
+class PlannerSelection:
+    name: str
+    sex: str
 
 
 @dataclass(slots=True)
 class PlannerArgs:
     target: str
-    parents: list[str]
-    sex: str
+    selections: list[PlannerSelection]
 
 
 class LkwgToolboxPlugin(Star):
@@ -118,24 +121,16 @@ class LkwgToolboxPlugin(Star):
             return
 
         mode = args[0]
-        if mode == "演示":
-            target = args[1] if len(args) > 1 else None
-            path, label = await self.dzfh.render_planner_demo(target)
-            async for item in self._send_image(event, f"生蛋规划演示：{target or '默认目标'}（{label}）", path):
-                yield item
-            return
-
         if mode == "路径":
             parsed = self._parse_planner_route(args[1:])
             path, label = await self.dzfh.render_planner_route(
                 parsed.target,
-                parents=parsed.parents,
-                sex=parsed.sex,
+                selections=[(selection.name, selection.sex) for selection in parsed.selections],
             )
-            parent_text = ",".join(parsed.parents) if parsed.parents else parsed.target
+            parent_text = self._format_planner_selections(parsed)
             async for item in self._send_image(
                 event,
-                f"生蛋规划路径：目标 {parsed.target}，父本 {parent_text}（{label}）",
+                f"生蛋规划路径：目标 {parsed.target}，选择 {parent_text}（{label}）",
                 path,
             ):
                 yield item
@@ -146,39 +141,47 @@ class LkwgToolboxPlugin(Star):
     def _parse_planner_route(self, args: list[str]) -> PlannerArgs:
         if not args:
             raise ValueError(
-                "缺少目标精灵。用法: /lkwg 生蛋规划 路径 <目标精灵> [父本 <父1,父2>] [性别 <公|母>]"
+                "缺少目标精灵。用法: /lkwg 生蛋规划 路径 <目标精灵> [公 <精灵1,精灵2>] [母 <精灵3,精灵4>]"
             )
         target = args[0]
-        parents: list[str] = []
-        sex = "male"
+        selections: list[PlannerSelection] = []
         i = 1
         while i < len(args):
             arg = args[i]
-            if arg == "父本":
+            if arg in {"公", "雄"}:
                 if i + 1 >= len(args):
-                    raise ValueError("父本 后缺少父本列表")
-                parents = self.dzfh.normalize_parent_list(args[i + 1])
+                    raise ValueError(f"{arg} 后缺少精灵列表")
+                selections.extend(
+                    PlannerSelection(name=name, sex="male")
+                    for name in self.dzfh.normalize_parent_list(args[i + 1])
+                )
                 i += 2
                 continue
-            if arg == "性别":
+            if arg in {"母", "雌"}:
                 if i + 1 >= len(args):
-                    raise ValueError("性别 后缺少性别值")
-                sex_value = args[i + 1].strip().lower()
-                sex_map = {
-                    "male": "male",
-                    "female": "female",
-                    "公": "male",
-                    "母": "female",
-                    "雄": "male",
-                    "雌": "female",
-                }
-                sex = sex_map.get(sex_value, "")
-                if sex not in {"male", "female"}:
-                    raise ValueError("性别仅支持 公 或 母")
+                    raise ValueError(f"{arg} 后缺少精灵列表")
+                selections.extend(
+                    PlannerSelection(name=name, sex="female")
+                    for name in self.dzfh.normalize_parent_list(args[i + 1])
+                )
                 i += 2
                 continue
             raise ValueError(f"未知参数: {arg}")
-        return PlannerArgs(target=target, parents=parents, sex=sex)
+        return PlannerArgs(target=target, selections=selections)
+
+    @staticmethod
+    def _format_planner_selections(parsed: PlannerArgs) -> str:
+        if not parsed.selections:
+            return f"公 {parsed.target}"
+
+        male_names = [selection.name for selection in parsed.selections if selection.sex == "male"]
+        female_names = [selection.name for selection in parsed.selections if selection.sex == "female"]
+        parts: list[str] = []
+        if male_names:
+            parts.append(f"公 {','.join(male_names)}")
+        if female_names:
+            parts.append(f"母 {','.join(female_names)}")
+        return "；".join(parts)
 
     async def _send_image(self, event: AstrMessageEvent, title: str, path: str):
         yield event.plain_result(title)
