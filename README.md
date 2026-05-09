@@ -12,6 +12,14 @@ uv add playwright
 uv run playwright install chromium
 ```
 
+如果运行在 Linux 容器里，通常还需要补系统依赖：
+
+```bash
+playwright install-deps chromium
+```
+
+本插件的截图能力是“每次命令临时启动一次 Chromium，截图完成后立即关闭”，不会常驻后台浏览器。
+
 ## 命令
 
 所有命令都以 `/lkwg` 开头。
@@ -37,6 +45,10 @@ uv run playwright install chromium
 - `只看异色` 是中文参数，不需要写英文开关。
 - `生蛋规划` 目前支持演示和参数化预览。
 - `预约提醒` 未包含在本插件中。
+- Linux 容器里如果截图失败，优先检查：
+  - 是否执行过 `playwright install chromium`
+  - 是否安装过系统依赖 `playwright install-deps chromium`
+  - 容器是否允许写 `/tmp`
 
 ## 开发
 

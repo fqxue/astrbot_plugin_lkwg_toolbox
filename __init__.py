@@ -1,1 +1,1 @@
-"""AstrBot 洛克王国工具插件。"""
+"""Service layer for astrbot_plugin_lkwg_toolbox."""
