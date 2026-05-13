@@ -2,12 +2,15 @@ import asyncio
 import json
 import os
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
-from playwright.async_api import Browser, BrowserContext, Error, Page, async_playwright
+from playwright.async_api import Browser, BrowserContext, Error, Page, Playwright, async_playwright
 
 
 APP_UA = (
@@ -23,10 +26,15 @@ PageCallback = Callable[[Page], Awaitable[None]]
 @dataclass(slots=True)
 class PageRenderService:
     temp_dir: Path = field(default_factory=lambda: Path(tempfile.gettempdir()) / "astrbot_lkwg_toolbox")
-    generated_files: list[Path] = field(default_factory=list)
+    generated_files: set[Path] = field(default_factory=set)
+    _cleanup_tasks: set[asyncio.Task[None]] = field(default_factory=set, init=False, repr=False)
+    _browser_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
+    _playwright: Playwright | None = field(default=None, init=False, repr=False)
+    _browser: Browser | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
+        self._cleanup_stale_files()
 
     async def screenshot_locator(
         self,
@@ -37,8 +45,9 @@ class PageRenderService:
         viewport: dict[str, int] | None = None,
         prepare: PageCallback | None = None,
     ) -> str:
-        async with async_playwright() as p:
-            browser = await self._launch_browser(p)
+        browser = await self._get_browser()
+        context: BrowserContext | None = None
+        try:
             context = await self._new_context(browser, viewport=viewport)
             page = await context.new_page()
             await page.goto(page_url, wait_until="load")
@@ -47,44 +56,10 @@ class PageRenderService:
                 await prepare(page)
             path = self._new_image_path(name_prefix)
             await page.locator(locator).first.screenshot(path=str(path))
-            await context.close()
-            await browser.close()
             return str(path)
-
-    async def fetch_jsonp(self, *, page_url: str, api_url: str, params: dict[str, Any]) -> dict[str, Any]:
-        async with async_playwright() as p:
-            browser = await self._launch_browser(p)
-            context = await self._new_context(browser, viewport={"width": 1280, "height": 900})
-            page = await context.new_page()
-            await page.goto(page_url, wait_until="load")
-            result = await page.evaluate(
-                """
-                async ({ apiUrl, params }) => {
-                    const callbackName = '__jsonp_' + Math.random().toString(36).slice(2);
-                    const search = new URLSearchParams(params);
-                    search.set('callback', callbackName);
-                    return await new Promise((resolve, reject) => {
-                        const script = document.createElement('script');
-                        window[callbackName] = (data) => {
-                            delete window[callbackName];
-                            script.remove();
-                            resolve(data);
-                        };
-                        script.onerror = () => {
-                            delete window[callbackName];
-                            script.remove();
-                            reject(new Error('JSONP 请求失败'));
-                        };
-                        script.src = apiUrl + '?' + search.toString();
-                        document.head.appendChild(script);
-                    });
-                }
-                """,
-                {"apiUrl": api_url, "params": params},
-            )
-            await context.close()
-            await browser.close()
-            return result
+        finally:
+            if context is not None:
+                await context.close()
 
     async def wait_images_ready(self, page: Page, selector: str) -> None:
         await page.wait_for_function(
@@ -99,6 +74,9 @@ class PageRenderService:
             """,
             arg=selector,
         )
+
+    async def fetch_jsonp(self, *, page_url: str, api_url: str, params: dict[str, Any]) -> dict[str, Any]:
+        return await asyncio.to_thread(self._fetch_jsonp_sync, page_url, api_url, params)
 
     async def hydrate_lazy_images(self, page: Page, selector: str) -> None:
         await page.evaluate(
@@ -116,11 +94,42 @@ class PageRenderService:
         )
 
     async def terminate(self) -> None:
-        for path in self.generated_files:
+        tasks = list(self._cleanup_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._cleanup_tasks.clear()
+
+        for path in list(self.generated_files):
+            await self.release_file(path)
+
+        async with self._browser_lock:
+            browser = self._browser
+            playwright_instance = self._playwright
+            self._browser = None
+            self._playwright = None
+
+        if browser is not None:
             try:
-                path.unlink(missing_ok=True)
-            except OSError:
+                await browser.close()
+            except Error:
                 pass
+        if playwright_instance is not None:
+            await playwright_instance.stop()
+
+    async def release_file(self, path: str | Path) -> None:
+        target = Path(path)
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            pass
+        self.generated_files.discard(target)
+
+    def schedule_file_cleanup(self, path: str | Path, *, delay_seconds: float = 60) -> None:
+        task = asyncio.create_task(self._cleanup_file_after_delay(Path(path), delay_seconds))
+        self._cleanup_tasks.add(task)
+        task.add_done_callback(self._cleanup_tasks.discard)
 
     async def _cleanup_common_popups(self, page: Page) -> None:
         await page.evaluate(
@@ -133,7 +142,20 @@ class PageRenderService:
             """
         )
 
-    async def _launch_browser(self, playwright_instance) -> Browser:
+    async def _cleanup_file_after_delay(self, path: Path, delay_seconds: float) -> None:
+        await asyncio.sleep(delay_seconds)
+        await self.release_file(path)
+
+    async def _get_browser(self) -> Browser:
+        async with self._browser_lock:
+            if self._browser is not None and self._browser.is_connected():
+                return self._browser
+            if self._playwright is None:
+                self._playwright = await async_playwright().start()
+            self._browser = await self._launch_browser(self._playwright)
+            return self._browser
+
+    async def _launch_browser(self, playwright_instance: Playwright) -> Browser:
         launch_kwargs: dict[str, Any] = {
             "headless": True,
         }
@@ -179,5 +201,40 @@ class PageRenderService:
 
     def _new_image_path(self, prefix: str) -> Path:
         path = self.temp_dir / f"{prefix}-{uuid.uuid4().hex}.png"
-        self.generated_files.append(path)
+        self.generated_files.add(path)
         return path
+
+    def _cleanup_stale_files(self, *, max_age_seconds: int = 3600) -> None:
+        cutoff = time.time() - max_age_seconds
+        for path in self.temp_dir.glob("*.png"):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    @staticmethod
+    def _fetch_jsonp_sync(page_url: str, api_url: str, params: dict[str, Any]) -> dict[str, Any]:
+        query = dict(params)
+        callback_name = "__jsonp_callback"
+        query["callback"] = callback_name
+        req = Request(
+            f"{api_url}?{urlencode(query)}",
+            headers={
+                "User-Agent": APP_UA,
+                "Referer": page_url,
+            },
+        )
+        with urlopen(req, timeout=30) as resp:
+            payload = resp.read().decode("utf-8", errors="ignore").strip()
+        prefix = f"{callback_name}("
+        suffix = ");"
+        if not payload.startswith(prefix):
+            raise RuntimeError("JSONP 响应格式错误")
+        if payload.endswith(suffix):
+            payload = payload[len(prefix):-len(suffix)]
+        elif payload.endswith(")"):
+            payload = payload[len(prefix):-1]
+        else:
+            raise RuntimeError("JSONP 响应格式错误")
+        return json.loads(payload)

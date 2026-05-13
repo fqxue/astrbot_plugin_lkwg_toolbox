@@ -108,6 +108,12 @@ class LkwgToolboxPlugin(Star):
             yield event.plain_result("用法: /lkwg 孵蛋查询 <尺寸> <重量>")
             return
         size, weight = args[0], args[1]
+        try:
+            float(size)
+            float(weight)
+        except ValueError:
+            yield event.plain_result("尺寸和重量必须是数字，例如: /lkwg 孵蛋查询 1.20 15.5")
+            return
         path = await self.dzfh.render_hatch(size, weight)
         async for item in self._send_image(event, f"孵蛋查询：尺寸 {size}，重量 {weight}", path):
             yield item
@@ -178,10 +184,11 @@ class LkwgToolboxPlugin(Star):
     async def _send_image(self, event: AstrMessageEvent, title: str, path: str):
         yield event.plain_result(title)
         yield event.image_result(path)
+        self.renderer.schedule_file_cleanup(path)
 
     async def _build_codes_forward(self, event: AstrMessageEvent):
         codes = await self.codes.get_codes()
-        stats = await self.codes.get_code_stats()
+        stats = await self.codes.get_code_stats(codes)
         nodes: list[Node] = []
         for item in codes:
             code_text = str(

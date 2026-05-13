@@ -25,8 +25,7 @@ class CodeService:
             raise RuntimeError("未找到兑换码列表数据")
         return json.loads(match.group(1))
 
-    async def get_code_stats(self) -> dict[str, Any]:
-        codes = await self.get_codes()
+    async def get_code_stats(self, codes: list[dict[str, Any]]) -> dict[str, Any]:
         ids = [int(item["id"]) for item in codes]
         return await self.renderer.fetch_jsonp(
             page_url=PAGE_URL,
